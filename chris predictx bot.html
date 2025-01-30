@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chris PredictX - Lucky Jet</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <style>
+        body {
+            background: #0d1117;
+            color: #58a6ff;
+            font-family: 'Arial', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #161b22;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(88, 166, 255, 0.5);
+        }
+        .button {
+            background: #58a6ff;
+            color: #0d1117;
+            border: none;
+            padding: 10px 20px;
+            font-size: 18px;
+            cursor: pointer;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+        .button:hover {
+            background: #1f6feb;
+        }
+        .param-container {
+            padding: 20px;
+            background: #21262d;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Lucky Jet Predictor</h1>
+        <div class="param-container">
+            <label for="risk-level">Niveau de risque :</label>
+            <select id="risk-level">
+                <option value="low">Faible</option>
+                <option value="medium">Moyen</option>
+                <option value="high">Élevé</option>
+            </select>
+            <button class="button" onclick="startPrediction()">Démarrer</button>
+        </div>
+        <div id="prediction-result">
+            <p><strong>Dernière prédiction :</strong> <span id="prediction">--</span></p>
+            <p><strong>Signal :</strong> <span id="signal">En attente...</span></p>
+        </div>
+    </div>
+    <script>
+        let model;
+
+        async function loadModel() {
+            try {
+                // Utilisation de l'URL modifiée pour accéder au modèle depuis Google Drive
+                model = await tf.loadLayersModel('https://drive.google.com/uc?export=download&id=1VHJKsiAhO40yBEFIRVgTA-IWlzzKg98N');
+                console.log("✅ Modèle chargé avec succès !");
+            } catch (error) {
+                console.error("❌ Erreur lors du chargement du modèle :", error);
+            }
+        }
+
+        async function fetchLuckyJetHistory() {
+            const API_URL = "https://crash-gateway-cr.100hp.app/history?id_n=1play_luckyjet";
+            try {
+                const response = await fetch(API_URL);
+                if (!response.ok) throw new Error(`Erreur HTTP : ${response.status}`);
+                const data = await response.json();
+                return data.history.slice(-5); // Récupérer les 5 dernières cotes jouées
+            } catch (error) {
+                console.error("❌ Erreur API :", error);
+                return null;
+            }
+        }
+
+        async function predictNextCoefficient(history, riskLevel) {
+            if (!model || history.length < 5) return "Erreur : modèle non chargé ou données insuffisantes.";
+
+            let inputData = history.map(item => parseFloat(item.top_coefficient));
+            let inputTensor = tf.tensor2d([inputData]).reshape([1, 5, 1]);
+
+            let prediction = model.predict(inputTensor);
+            let predictedValue = (await prediction.data())[0];
+
+            if (riskLevel === "low") predictedValue *= 0.85;
+            else if (riskLevel === "high") predictedValue *= 1.2;
+
+            return predictedValue.toFixed(2);
+        }
+
+        async function generatePrediction() {
+            const history = await fetchLuckyJetHistory();
+            const riskLevel = document.getElementById("risk-level").value;
+            if (history) {
+                const prediction = await predictNextCoefficient(history, riskLevel);
+                document.getElementById('prediction').textContent = prediction + 'x';
+                document.getElementById('signal').textContent = "⚠️ Jouez cette cote maintenant !";
+            }
+        }
+
+        function startPrediction() {
+            loadModel().then(() => {
+                generatePrediction();
+                setInterval(generatePrediction, 60000);  // Mise à jour toutes les 60 secondes
+            });
+        }
+    </script>
+</body>
+</html>
